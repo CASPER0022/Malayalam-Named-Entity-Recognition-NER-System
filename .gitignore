@@ -1,0 +1,38 @@
+# Python Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Large Datasets (>100MB)
+dataset/
+*.csv
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Model Checkpoints & Large Outputs
+results/
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.onnx
+
+# Hugging Face & Transformers Cache
+.cache/
+huggingface/
+
+# IDE & OS Files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints
