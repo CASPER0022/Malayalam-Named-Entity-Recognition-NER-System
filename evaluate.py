@@ -47,11 +47,21 @@ def evaluate_test_set():
     print("Evaluating Malayalam NER Model on Test Set")
     print("=" * 60)
 
-    model_dir = config.MODEL_SAVE_DIR if os.path.exists(os.path.join(config.MODEL_SAVE_DIR, "config.json")) else config.MODEL_NAME
-    print(f"Loading model checkpoint from: {model_dir}")
+    if config.USE_CRF:
+        model_dir = config.CRF_MODEL_SAVE_DIR if os.path.exists(os.path.join(config.CRF_MODEL_SAVE_DIR, "pytorch_model.bin")) else config.MODEL_NAME
+        print(f"Loading CRF model checkpoint from: {model_dir}")
+        tokenizer = AutoTokenizer.from_pretrained(config.MODEL_NAME)
+        from src.model import MalayalamBERTCRF
+        model = MalayalamBERTCRF(model_name=config.MODEL_NAME)
+        if model_dir != config.MODEL_NAME:
+            model.load_pretrained(model_dir)
+    else:
+        model_dir = config.MODEL_SAVE_DIR if os.path.exists(os.path.join(config.MODEL_SAVE_DIR, "config.json")) else config.MODEL_NAME
+        print(f"Loading Linear model checkpoint from: {model_dir}")
+        tokenizer = AutoTokenizer.from_pretrained(model_dir)
+        from src.model import build_ner_model
+        model = build_ner_model(model_name=model_dir, use_crf=False)
 
-    tokenizer = AutoTokenizer.from_pretrained(model_dir)
-    model = AutoModelForTokenClassification.from_pretrained(model_dir)
     model.to(config.DEVICE)
     model.eval()
 
@@ -71,20 +81,38 @@ def evaluate_test_set():
             attention_mask = batch["attention_mask"].to(config.DEVICE)
             labels = batch["labels"].to(config.DEVICE)
 
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-            logits = outputs.logits
-            preds = torch.argmax(logits, dim=-1).cpu().numpy()
-            targets = labels.cpu().numpy()
+            if config.USE_CRF:
+                outputs_eval = model(input_ids=input_ids, attention_mask=attention_mask)
+                preds_list = outputs_eval.predictions
+                targets = labels.cpu().numpy()
 
-            for i in range(len(targets)):
-                sentence_preds = []
-                sentence_labels = []
-                for j in range(len(targets[i])):
-                    if targets[i][j] != -100:
-                        sentence_preds.append(config.ID2LABEL[preds[i][j]])
-                        sentence_labels.append(config.ID2LABEL[targets[i][j]])
-                all_preds.append(sentence_preds)
-                all_labels.append(sentence_labels)
+                for i in range(len(targets)):
+                    sentence_preds = []
+                    sentence_labels = []
+                    non_masked_idx = 0
+                    for j in range(len(targets[i])):
+                        if targets[i][j] != -100:
+                            pred_id = preds_list[i][non_masked_idx]
+                            sentence_preds.append(config.ID2LABEL[pred_id])
+                            sentence_labels.append(config.ID2LABEL[targets[i][j]])
+                            non_masked_idx += 1
+                    all_preds.append(sentence_preds)
+                    all_labels.append(sentence_labels)
+            else:
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+                logits = outputs.logits
+                preds = torch.argmax(logits, dim=-1).cpu().numpy()
+                targets = labels.cpu().numpy()
+
+                for i in range(len(targets)):
+                    sentence_preds = []
+                    sentence_labels = []
+                    for j in range(len(targets[i])):
+                        if targets[i][j] != -100:
+                            sentence_preds.append(config.ID2LABEL[preds[i][j]])
+                            sentence_labels.append(config.ID2LABEL[targets[i][j]])
+                    all_preds.append(sentence_preds)
+                    all_labels.append(sentence_labels)
 
     print("\n" + "=" * 60)
     print("Seqeval Entity Classification Report:")

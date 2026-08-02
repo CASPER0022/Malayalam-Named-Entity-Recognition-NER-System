@@ -39,24 +39,45 @@ def evaluate_model(model, val_loader, device):
             attention_mask = batch["attention_mask"].to(device)
             labels = batch["labels"].to(device)
 
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-            logits = outputs.logits
+            if config.USE_CRF:
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+                loss = outputs.loss
+                total_val_loss += loss.item()
 
-            loss = criterion(logits.view(-1, config.NUM_LABELS), labels.view(-1))
-            total_val_loss += loss.item()
+                outputs_eval = model(input_ids=input_ids, attention_mask=attention_mask)
+                preds_list = outputs_eval.predictions
+                targets = labels.cpu().numpy()
 
-            preds = torch.argmax(logits, dim=-1).cpu().numpy()
-            targets = labels.cpu().numpy()
+                for i in range(len(targets)):
+                    sentence_preds = []
+                    sentence_labels = []
+                    non_masked_idx = 0
+                    for j in range(len(targets[i])):
+                        if targets[i][j] != -100:
+                            pred_id = preds_list[i][non_masked_idx]
+                            sentence_preds.append(config.ID2LABEL[pred_id])
+                            sentence_labels.append(config.ID2LABEL[targets[i][j]])
+                            non_masked_idx += 1
+                    all_preds.append(sentence_preds)
+                    all_labels.append(sentence_labels)
+            else:
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+                logits = outputs.logits
+                loss = criterion(logits.view(-1, config.NUM_LABELS), labels.view(-1))
+                total_val_loss += loss.item()
 
-            for i in range(len(targets)):
-                sentence_preds = []
-                sentence_labels = []
-                for j in range(len(targets[i])):
-                    if targets[i][j] != -100:
-                        sentence_preds.append(config.ID2LABEL[preds[i][j]])
-                        sentence_labels.append(config.ID2LABEL[targets[i][j]])
-                all_preds.append(sentence_preds)
-                all_labels.append(sentence_labels)
+                preds = torch.argmax(logits, dim=-1).cpu().numpy()
+                targets = labels.cpu().numpy()
+
+                for i in range(len(targets)):
+                    sentence_preds = []
+                    sentence_labels = []
+                    for j in range(len(targets[i])):
+                        if targets[i][j] != -100:
+                            sentence_preds.append(config.ID2LABEL[preds[i][j]])
+                            sentence_labels.append(config.ID2LABEL[targets[i][j]])
+                    all_preds.append(sentence_preds)
+                    all_labels.append(sentence_labels)
 
     avg_loss = total_val_loss / max(len(val_loader), 1)
     f1 = f1_score(all_labels, all_preds)
@@ -93,7 +114,7 @@ def train():
     val_loader = DataLoader(val_dataset, batch_size=config.BATCH_SIZE, shuffle=False)
 
     # 3. Model & Loss Weighting
-    model = build_ner_model(model_name=config.MODEL_NAME, num_labels=config.NUM_LABELS)
+    model = build_ner_model(model_name=config.MODEL_NAME, num_labels=config.NUM_LABELS, use_crf=config.USE_CRF)
     model.to(config.DEVICE)
 
     class_weights = get_class_weights(train_records)
@@ -125,20 +146,34 @@ def train():
             attention_mask = batch["attention_mask"].to(config.DEVICE)
             labels = batch["labels"].to(config.DEVICE)
 
-            if config.USE_FP16 and scaler is not None:
-                with torch.amp.autocast('cuda'):
+            if config.USE_CRF:
+                if config.USE_FP16 and scaler is not None:
+                    with torch.amp.autocast('cuda'):
+                        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+                        loss = outputs.loss
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+                    loss = outputs.loss
+                    loss.backward()
+                    optimizer.step()
+            else:
+                if config.USE_FP16 and scaler is not None:
+                    with torch.amp.autocast('cuda'):
+                        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+                        logits = outputs.logits
+                        loss = criterion(logits.view(-1, config.NUM_LABELS), labels.view(-1))
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
                     outputs = model(input_ids=input_ids, attention_mask=attention_mask)
                     logits = outputs.logits
                     loss = criterion(logits.view(-1, config.NUM_LABELS), labels.view(-1))
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
-            else:
-                outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-                logits = outputs.logits
-                loss = criterion(logits.view(-1, config.NUM_LABELS), labels.view(-1))
-                loss.backward()
-                optimizer.step()
+                    loss.backward()
+                    optimizer.step()
 
             scheduler.step()
             running_loss += loss.item()
@@ -163,9 +198,10 @@ def train():
 
         if val_f1 > best_f1 or epoch == 1:
             best_f1 = val_f1
-            print(f"💾 Saving best model checkpoint to {config.MODEL_SAVE_DIR} (F1: {best_f1:.4f})...\n")
-            model.save_pretrained(config.MODEL_SAVE_DIR)
-            tokenizer.save_pretrained(config.MODEL_SAVE_DIR)
+            save_path = config.CRF_MODEL_SAVE_DIR if config.USE_CRF else config.MODEL_SAVE_DIR
+            print(f"💾 Saving best model checkpoint to {save_path} (F1: {best_f1:.4f})...\n")
+            model.save_pretrained(save_path)
+            tokenizer.save_pretrained(save_path)
 
     total_training_time = time.time() - overall_start_time
     print("=" * 60)

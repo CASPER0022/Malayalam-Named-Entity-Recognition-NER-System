@@ -8,9 +8,14 @@ TRAIN_CSV = os.path.join(DATA_DIR, "train.csv")
 VAL_CSV = os.path.join(DATA_DIR, "validation.csv")
 TEST_CSV = os.path.join(DATA_DIR, "test.csv")
 MODEL_SAVE_DIR = os.path.join(BASE_DIR, "results", "malayalam_ner_model")
+CRF_MODEL_SAVE_DIR = os.path.join(BASE_DIR, "results", "malayalam_ner_crf_model")
 LOG_DIR = os.path.join(BASE_DIR, "results", "logs")
 
+# Sequence Tagging Model Architecture Selector (Toggle between standard Linear head or CRF head)
+USE_CRF = True
+
 os.makedirs(MODEL_SAVE_DIR, exist_ok=True)
+os.makedirs(CRF_MODEL_SAVE_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # Hardware Acceleration

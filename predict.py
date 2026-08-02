@@ -7,18 +7,31 @@ import config
 
 class MalayalamNERPredictor:
     def __init__(self, model_path=None):
-        if model_path is None:
-            model_path = config.MODEL_SAVE_DIR if os.path.exists(os.path.join(config.MODEL_SAVE_DIR, "config.json")) else config.MODEL_NAME
+        if config.USE_CRF:
+            if model_path is None:
+                model_path = config.CRF_MODEL_SAVE_DIR if os.path.exists(os.path.join(config.CRF_MODEL_SAVE_DIR, "pytorch_model.bin")) else config.MODEL_NAME
+            
+            print(f"Loading CRF Predictor checkpoint: {model_path}")
+            from src.model import MalayalamBERTCRF
+            self.tokenizer = AutoTokenizer.from_pretrained(config.MODEL_NAME)
+            self.model = MalayalamBERTCRF(model_name=config.MODEL_NAME)
+            if model_path != config.MODEL_NAME:
+                self.model.load_pretrained(model_path)
+        else:
+            if model_path is None:
+                model_path = config.MODEL_SAVE_DIR if os.path.exists(os.path.join(config.MODEL_SAVE_DIR, "config.json")) else config.MODEL_NAME
+            
+            print(f"Loading Linear Predictor checkpoint: {model_path}")
+            self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+            self.model = AutoModelForTokenClassification.from_pretrained(model_path)
 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
-        self.model = AutoModelForTokenClassification.from_pretrained(model_path)
         self.model.to(config.DEVICE)
         self.model.eval()
 
     def predict(self, text):
         """Predicts named entities for raw Malayalam input text."""
-        # Simple whitespace / punctuation tokenization for input Malayalam text
-        words = re.findall(r'\w+|[^\w\s]', text, re.UNICODE)
+        # Split Malayalam text into words without breaking Indic glyph clusters
+        words = re.findall(r'[^\s.,!?\(\)\x22\x27\-]+|[.,!?\(\)\x22\x27\-]', text)
         if not words:
             return [], []
 
@@ -34,29 +47,49 @@ class MalayalamNERPredictor:
         attention_mask = encoding["attention_mask"].to(config.DEVICE)
         word_ids = encoding.word_ids(batch_index=0)
 
-        with torch.no_grad():
-            outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-            logits = outputs.logits
-            probabilities = torch.softmax(logits, dim=-1)
-            predicted_tag_ids = torch.argmax(probabilities, dim=-1).squeeze(0).cpu().numpy()
-            confidence_scores = torch.max(probabilities, dim=-1).values.squeeze(0).cpu().numpy()
-
         word_tag_map = []
         previous_word_idx = None
 
-        for idx, word_idx in enumerate(word_ids):
-            if word_idx is not None and word_idx != previous_word_idx:
-                if word_idx < len(words):
-                    tag_id = predicted_tag_ids[idx]
-                    tag = config.ID2LABEL.get(tag_id, "O")
-                    confidence = float(confidence_scores[idx])
-                    word_tag_map.append({
-                        "word": words[word_idx],
-                        "tag": tag,
-                        "confidence": round(confidence, 4)
-                    })
-                previous_word_idx = word_idx
+        with torch.no_grad():
+            if config.USE_CRF:
+                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+                preds_list = outputs.predictions[0]
+                emissions = outputs.logits
+                probs = torch.softmax(emissions, dim=-1).squeeze(0).cpu().numpy()
+                
+                non_masked_idx = 0
+                for idx, word_idx in enumerate(word_ids):
+                    if word_idx is not None and word_idx != previous_word_idx:
+                        if word_idx < len(words) and non_masked_idx < len(preds_list):
+                            tag_id = preds_list[non_masked_idx]
+                            tag = config.ID2LABEL.get(tag_id, "O")
+                            confidence = float(np.max(probs[idx]))
+                            word_tag_map.append({
+                                "word": words[word_idx],
+                                "tag": tag,
+                                "confidence": round(confidence, 4)
+                            })
+                            non_masked_idx += 1
+                        previous_word_idx = word_idx
+            else:
+                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+                logits = outputs.logits
+                probabilities = torch.softmax(logits, dim=-1)
+                predicted_tag_ids = torch.argmax(probabilities, dim=-1).squeeze(0).cpu().numpy()
+                confidence_scores = torch.max(probabilities, dim=-1).values.squeeze(0).cpu().numpy()
 
+                for idx, word_idx in enumerate(word_ids):
+                    if word_idx is not None and word_idx != previous_word_idx:
+                        if word_idx < len(words):
+                            tag_id = predicted_tag_ids[idx]
+                            tag = config.ID2LABEL.get(tag_id, "O")
+                            confidence = float(confidence_scores[idx])
+                            word_tag_map.append({
+                                "word": words[word_idx],
+                                "tag": tag,
+                                "confidence": round(confidence, 4)
+                            })
+                        previous_word_idx = word_idx
         # Group into entity spans
         entities = []
         current_entity = None
