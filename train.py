@@ -6,12 +6,22 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, get_cosine_schedule_with_warmup
 from seqeval.metrics import classification_report, f1_score, precision_score, recall_score
+from tqdm import tqdm
 import pandas as pd
 import numpy as np
 
 import config
 from src.dataset import load_ner_dataframe, MalayalamNERDataset
 from src.model import build_ner_model, get_class_weights
+
+
+def format_time(seconds):
+    """Formats seconds into HH:MM:SS or MM:SS."""
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    if h > 0:
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
 
 
 def evaluate_model(model, val_loader, device):
@@ -22,8 +32,9 @@ def evaluate_model(model, val_loader, device):
 
     criterion = nn.CrossEntropyLoss(ignore_index=-100)
 
+    val_progress = tqdm(val_loader, desc="Validating", leave=False, unit="batch")
     with torch.no_grad():
-        for batch in val_loader:
+        for batch in val_progress:
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
             labels = batch["labels"].to(device)
@@ -97,14 +108,17 @@ def train():
     scaler = torch.amp.GradScaler('cuda') if config.USE_FP16 else None
 
     best_f1 = 0.0
+    overall_start_time = time.time()
 
     # 5. Training Loop
     for epoch in range(1, config.EPOCHS + 1):
         model.train()
-        start_time = time.time()
+        epoch_start_time = time.time()
         running_loss = 0.0
 
-        for step, batch in enumerate(train_loader, 1):
+        pbar = tqdm(enumerate(train_loader, 1), total=len(train_loader), desc=f"Epoch {epoch}/{config.EPOCHS}", unit="batch")
+
+        for step, batch in pbar:
             optimizer.zero_grad()
 
             input_ids = batch["input_ids"].to(config.DEVICE)
@@ -129,23 +143,35 @@ def train():
             scheduler.step()
             running_loss += loss.item()
 
-            if step % 200 == 0 or step == len(train_loader):
-                print(f"Epoch {epoch}/{config.EPOCHS} | Step {step}/{len(train_loader)} | Train Loss: {running_loss / step:.4f}")
+            current_loss = running_loss / step
+            elapsed_sec = time.time() - epoch_start_time
+            steps_per_sec = step / elapsed_sec if elapsed_sec > 0 else 0
+            eta_sec = (len(train_loader) - step) / steps_per_sec if steps_per_sec > 0 else 0
 
-        elapsed = time.time() - start_time
+            pbar.set_postfix({
+                "loss": f"{current_loss:.4f}",
+                "elapsed": format_time(elapsed_sec),
+                "eta": format_time(eta_sec)
+            })
+
+        epoch_elapsed = time.time() - epoch_start_time
         val_loss, val_prec, val_rec, val_f1, _, _ = evaluate_model(model, val_loader, config.DEVICE)
 
-        print(f"\n--- Epoch {epoch} Summary ---")
-        print(f"Time: {elapsed:.2f}s | Train Loss: {running_loss / len(train_loader):.4f}")
-        print(f"Val Loss: {val_loss:.4f} | Precision: {val_prec:.4f} | Recall: {val_rec:.4f} | F1-Score: {val_f1:.4f}")
+        print(f"\n✨ --- Epoch {epoch}/{config.EPOCHS} Summary --- ✨")
+        print(f"⏱️ Epoch Time Elapsed: {format_time(epoch_elapsed)} | Avg Loss: {running_loss / len(train_loader):.4f}")
+        print(f"📊 Validation Results -> Loss: {val_loss:.4f} | Precision: {val_prec:.4f} | Recall: {val_rec:.4f} | F1-Score: {val_f1:.4f}")
 
         if val_f1 > best_f1 or epoch == 1:
             best_f1 = val_f1
-            print(f"Saving best model checkpoint to {config.MODEL_SAVE_DIR} (F1: {best_f1:.4f})...\n")
+            print(f"💾 Saving best model checkpoint to {config.MODEL_SAVE_DIR} (F1: {best_f1:.4f})...\n")
             model.save_pretrained(config.MODEL_SAVE_DIR)
             tokenizer.save_pretrained(config.MODEL_SAVE_DIR)
 
-    print("Training Completed Successfully!")
+    total_training_time = time.time() - overall_start_time
+    print("=" * 60)
+    print(f"🎉 Training Completed Successfully!")
+    print(f"⏳ Total Elapsed Time: {format_time(total_training_time)} | Best Validation F1: {best_f1:.4f}")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
