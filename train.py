@@ -51,13 +51,11 @@ def evaluate_model(model, val_loader, device):
                 for i in range(len(targets)):
                     sentence_preds = []
                     sentence_labels = []
-                    non_masked_idx = 0
                     for j in range(len(targets[i])):
-                        if targets[i][j] != -100:
-                            pred_id = preds_list[i][non_masked_idx]
+                        if targets[i][j] != -100 and j < len(preds_list[i]):
+                            pred_id = preds_list[i][j]
                             sentence_preds.append(config.ID2LABEL[pred_id])
                             sentence_labels.append(config.ID2LABEL[targets[i][j]])
-                            non_masked_idx += 1
                     all_preds.append(sentence_preds)
                     all_labels.append(sentence_labels)
             else:
