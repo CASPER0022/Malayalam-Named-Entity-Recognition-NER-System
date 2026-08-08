@@ -45,7 +45,9 @@ ENTITY_COLORS = {
     "PER": "#3B82F6",  # Blue
     "ORG": "#10B981",  # Emerald / Teal
     "LOC": "#F59E0B",  # Amber / Gold
-    "MISC": "#8B5CF6"  # Purple
+    "MISC": "#8B5CF6", # Purple
+    "DATE": "#EC4899", # Pink
+    "CARDINAL": "#06B6D4" # Cyan / Teal-blue
 }
 
 # Training Hyperparameters

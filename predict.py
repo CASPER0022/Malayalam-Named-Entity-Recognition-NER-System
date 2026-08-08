@@ -89,6 +89,44 @@ class MalayalamNERPredictor:
                                 "confidence": round(confidence, 4)
                             })
                         previous_word_idx = word_idx
+        # --- Option B: Hybrid Rule-Based (Regex) Overlay ---
+        months_pattern = re.compile(
+            r"^(ജനുവരി|ഫെബ്രുവരി|മാർച്ച്|ഏപ്രിൽ|മേയ്|ജൂൺ|ജൂലൈ|ഓഗസ്റ്റ്|സെപ്റ്റംബർ|ഒക്ടോബർ|നവംബർ|ഡിസംബർ)$"
+        )
+        cardinal_pattern = re.compile(
+            r"^[\d%\.\+\-,\u0D66-\u0D6F]+(?:ശതമാനം|രൂപ|ജിബി|ലക്ഷം|കോടി|വർഷം|മാസം|ദിവസം)?$"
+        )
+
+        for i, item in enumerate(word_tag_map):
+            word = item["word"]
+            # Skip if neural network already predicted a strong entity (PER, ORG, LOC)
+            if item["tag"] != "O":
+                continue
+            
+            # Check for months -> DATE
+            if months_pattern.match(word):
+                item["tag"] = "B-DATE"
+                item["confidence"] = 1.0
+                continue
+                
+            # Check for numeric patterns
+            if cardinal_pattern.match(word) or any(c.isdigit() for c in word):
+                # Is it adjacent to a month? (e.g. "8 ഓഗസ്റ്റ്" or "ഓഗസ്റ്റ് 8") -> DATE
+                is_date = False
+                for offset in [-2, -1, 1, 2]:
+                    target_idx = i + offset
+                    if 0 <= target_idx < len(word_tag_map):
+                        adj_word = word_tag_map[target_idx]["word"]
+                        if months_pattern.match(adj_word):
+                            is_date = True
+                            break
+                
+                if is_date:
+                    item["tag"] = "I-DATE" if i > 0 and word_tag_map[i-1]["tag"] in ["B-DATE", "I-DATE"] else "B-DATE"
+                else:
+                    item["tag"] = "B-CARDINAL"
+                item["confidence"] = 1.0
+
         # Group into entity spans
         entities = []
         current_entity = None
