@@ -29,6 +29,9 @@ class MalayalamBERTCRF(nn.Module):
         # Create binary mask where 1 represents a valid token and 0 represents a masked token ([PAD] or subword)
         if labels is not None:
             mask = (labels != -100)
+            # Ensure the first token [CLS] mask is always True to satisfy pytorch-crf validation
+            mask[:, 0] = True
+            
             # CRF cannot handle -100 labels directly, replace them with 0 (masked out anyway)
             clean_labels = labels.clone()
             clean_labels[clean_labels == -100] = 0
