@@ -58,11 +58,10 @@ class MalayalamNERPredictor:
                 emissions = outputs.logits
                 probs = torch.softmax(emissions, dim=-1).squeeze(0).cpu().numpy()
                 
-                non_masked_idx = 0
                 for idx, word_idx in enumerate(word_ids):
                     if word_idx is not None and word_idx != previous_word_idx:
-                        if word_idx < len(words) and non_masked_idx < len(preds_list):
-                            tag_id = preds_list[non_masked_idx]
+                        if word_idx < len(words) and idx < len(preds_list):
+                            tag_id = preds_list[idx]
                             tag = config.ID2LABEL.get(tag_id, "O")
                             confidence = float(np.max(probs[idx]))
                             word_tag_map.append({
@@ -70,7 +69,6 @@ class MalayalamNERPredictor:
                                 "tag": tag,
                                 "confidence": round(confidence, 4)
                             })
-                            non_masked_idx += 1
                         previous_word_idx = word_idx
             else:
                 outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
