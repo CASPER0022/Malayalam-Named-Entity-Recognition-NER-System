@@ -1,9 +1,6 @@
+import os
 import torch
 import torch.nn as nn
-from transformers import AutoModelForTokenClassification, AutoConfig
-import config
-
-
 from transformers import AutoModelForTokenClassification, AutoConfig, AutoModel
 from torchcrf import CRF
 import config
