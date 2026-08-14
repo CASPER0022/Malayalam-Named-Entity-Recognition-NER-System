@@ -199,13 +199,12 @@ custom_css = """
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     max-width: 1200px !important;
     margin: auto;
-    background: #f8fafc;
 }
 .app-header {
     background: #3f51b5;
     color: white;
     padding: 24px;
-    border-radius: 8px 8px 0 0;
+    border-radius: 8px;
     margin-bottom: 20px;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
@@ -213,17 +212,14 @@ custom_css = """
     font-size: 2.0rem;
     font-weight: 700;
     margin: 0 0 4px 0;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.025em;
+    color: white !important;
 }
 .app-header p {
     font-size: 0.95rem;
     margin: 0;
-    opacity: 0.9;
-}
-.gr-box {
-    border-radius: 8px !important;
-    border: 1px solid #e2e8f0 !important;
-    background: white !important;
+    opacity: 0.95;
+    color: white !important;
 }
 .gr-button-primary {
     background: #3f51b5 !important;
