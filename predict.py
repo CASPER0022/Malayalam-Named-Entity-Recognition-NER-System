@@ -125,7 +125,31 @@ class MalayalamNERPredictor:
                     item["tag"] = "I-DATE" if i > 0 and word_tag_map[i-1]["tag"] in ["B-DATE", "I-DATE"] else "B-DATE"
                 else:
                     item["tag"] = "B-CARDINAL"
-                item["confidence"] = 1.0
+        # Force merge formatted dates (e.g. DD-MM-YYYY, YYYY-MM-DD split by - or /)
+        i = 0
+        while i < len(word_tag_map) - 4:
+            w0 = word_tag_map[i]["word"]
+            w1 = word_tag_map[i+1]["word"]
+            w2 = word_tag_map[i+2]["word"]
+            w3 = word_tag_map[i+3]["word"]
+            w4 = word_tag_map[i+4]["word"]
+            
+            # Check if it matches a date pattern like 12-04-2023 or 2023-04-12
+            is_date_format = w0.isdigit() and w1 in ["-", "/"] and w2.isdigit() and w3 in ["-", "/"] and w4.isdigit()
+            if is_date_format:
+                word_tag_map[i]["tag"] = "B-DATE"
+                word_tag_map[i+1]["tag"] = "I-DATE"
+                word_tag_map[i+2]["tag"] = "I-DATE"
+                word_tag_map[i+3]["tag"] = "I-DATE"
+                word_tag_map[i+4]["tag"] = "I-DATE"
+                word_tag_map[i]["confidence"] = 1.0
+                word_tag_map[i+1]["confidence"] = 1.0
+                word_tag_map[i+2]["confidence"] = 1.0
+                word_tag_map[i+3]["confidence"] = 1.0
+                word_tag_map[i+4]["confidence"] = 1.0
+                i += 5
+                continue
+            i += 1
 
         # Group into entity spans
         entities = []
@@ -157,6 +181,11 @@ class MalayalamNERPredictor:
 
         if current_entity:
             entities.append(current_entity)
+
+        # Post-process entity text spacing for dates (remove spaces around hyphens/slashes)
+        for ent in entities:
+            if ent["type"] == "DATE":
+                ent["text"] = ent["text"].replace(" - ", "-").replace(" / ", "/")
 
         return word_tag_map, entities
 

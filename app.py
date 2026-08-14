@@ -19,17 +19,31 @@ def process_malayalam_ner(text, visible_entities=None):
 
     # Format for Gradio HighlightedText: list of (word, label) tuples
     highlighted_output = []
-    for item in word_map:
+    for idx, item in enumerate(word_map):
         word = item["word"]
         tag = item["tag"]
+        
+        # Decide if we need a space after this token
+        needs_space = True
+        if word in ["-", "/"]:
+            needs_space = False
+        elif idx < len(word_map) - 1:
+            next_word = word_map[idx + 1]["word"]
+            if next_word in ["-", "/", ".", ",", "!", "?", ")", "]", "}"]:
+                needs_space = False
+        if word in ["(", "[", "{"]:
+            needs_space = False
+
+        space = " " if needs_space else ""
+        
         if tag == "O":
-            highlighted_output.append((word + " ", None))
+            highlighted_output.append((word + space, None))
         else:
             ent_type = tag.split("-")[1]
             if ent_type in visible_entities:
-                highlighted_output.append((word + " ", ent_type))
+                highlighted_output.append((word + space, ent_type))
             else:
-                highlighted_output.append((word + " ", None))
+                highlighted_output.append((word + space, None))
 
     # Format for Entity Data Table
     table_data = []
@@ -185,26 +199,38 @@ custom_css = """
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     max-width: 1200px !important;
     margin: auto;
+    background: #f8fafc;
 }
 .app-header {
-    background: linear-gradient(135deg, #4f46e5 0%, #312e81 100%);
+    background: #3f51b5;
     color: white;
-    padding: 30px;
-    border-radius: 12px;
-    margin-bottom: 25px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    text-align: center;
+    padding: 24px;
+    border-radius: 8px 8px 0 0;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 .app-header h1 {
-    font-size: 2.2rem;
-    font-weight: 800;
-    margin: 0 0 10px 0;
-    letter-spacing: -0.025em;
+    font-size: 2.0rem;
+    font-weight: 700;
+    margin: 0 0 4px 0;
+    letter-spacing: -0.02em;
 }
 .app-header p {
-    font-size: 1rem;
+    font-size: 0.95rem;
     margin: 0;
     opacity: 0.9;
+}
+.gr-box {
+    border-radius: 8px !important;
+    border: 1px solid #e2e8f0 !important;
+    background: white !important;
+}
+.gr-button-primary {
+    background: #3f51b5 !important;
+    border: none !important;
+}
+.gr-button-primary:hover {
+    background: #303f9f !important;
 }
 """
 
@@ -214,131 +240,124 @@ theme = gr.themes.Soft(
     neutral_hue="slate"
 )
 
-with gr.Blocks(title="Malayalam NER System", css=custom_css, theme=theme) as demo:
-    # Custom HTML header matching displaCy banner
+with gr.Blocks(title="displaCy Named Entity Visualizer", css=custom_css, theme=theme) as demo:
+    # Custom HTML header matching explosion.ai
     gr.HTML(
         """
         <div class="app-header">
-            <h1>🇮🇳 Malayalam Named Entity Visualizer</h1>
-            <p>Fine-Tuned Deep Learning Transformer Model for Malayalam Entity Extraction & Discovery</p>
+            <h1>displaCy Named Entity Visualizer</h1>
+            <p>Interactive Named Entity Recognition for Malayalam powered by fine-tuned IndicBERTv2/MuRIL CRF architecture</p>
         </div>
         """
     )
 
-    with gr.Tabs():
-        with gr.Tab("📝 Single Text Analysis"):
-            with gr.Row():
-                with gr.Column(scale=2):
-                    input_text = gr.Textbox(
-                        lines=5,
-                        placeholder="ഇവിടെ മലയാളം വാചകം നൽകുക (Enter Malayalam sentence here)...",
-                        label="Input Text",
-                        value="തിരുവനന്തപുരത്ത് നടന്ന ചടങ്ങിൽ കേരള മുഖ്യമന്ത്രി പിണറായി വിജയൻ സംസാരിച്ചു ."
-                    )
-                    
-                    visible_entities_single = gr.CheckboxGroup(
-                        choices=["PER", "ORG", "LOC", "DATE", "CARDINAL"],
-                        value=["PER", "ORG", "LOC", "DATE", "CARDINAL"],
-                        label="Entity Labels to Display"
-                    )
-                    
-                    submit_btn = gr.Button("🔍 Visualise Entities", variant="primary", size="lg")
-
-                    gr.Examples(
-                        examples=sample_examples,
-                        inputs=input_text,
-                        label="Click a sample sentence to load:"
-                    )
-        
-                with gr.Column(scale=3):
-                    gr.Markdown("### 🏷️ Visualized Named Entities")
-                    highlighted_output = gr.HighlightedText(
-                        label="Interactive Entity Highlight",
-                        color_map=config.ENTITY_COLORS,
-                        combine_adjacent=True
-                    )
-        
-                    gr.Markdown("### 📊 Extracted Entity Details")
-                    entity_table = gr.Dataframe(
-                        headers=["Entity Text", "Entity Class", "Confidence Score", "Quick Search"],
-                        datatype=["markdown", "str", "str", "markdown"],
-                        interactive=False,
-                        wrap=True
-                    )
-
-                    single_plot = gr.BarPlot(
-                        x="Entity Class",
-                        y="Count",
-                        title="Entity Class Count Distribution",
-                        color="Entity Class",
-                        color_map=config.ENTITY_COLORS,
-                        y_lim=[0, None],
-                        height=220
-                    )
+    with gr.Row():
+        with gr.Column(scale=3):
+            input_text = gr.Textbox(
+                lines=7,
+                placeholder="Enter Malayalam text here...",
+                label="Text to analyze",
+                value="തിരുവനന്തപുരത്ത് നടന്ന ചടങ്ങിൽ കേരള മുഖ്യമന്ത്രി പിണറായി വിജയൻ സംസാരിച്ചു. 12-04-2023"
+            )
+            submit_btn = gr.Button("Visualise Entities", variant="primary", size="lg")
             
-            # Allow live prediction when parameters or input changes
-            submit_btn.click(
-                fn=process_malayalam_ner,
-                inputs=[input_text, visible_entities_single],
-                outputs=[highlighted_output, entity_table, single_plot]
-            )
-            visible_entities_single.change(
-                fn=process_malayalam_ner,
-                inputs=[input_text, visible_entities_single],
-                outputs=[highlighted_output, entity_table, single_plot]
+            gr.Examples(
+                examples=sample_examples,
+                inputs=input_text,
+                label="Click a sample sentence to load:"
             )
 
-        with gr.Tab("📂 Batch File Processing"):
-            with gr.Row():
-                with gr.Column(scale=2):
-                    file_input = gr.File(
-                        label="Upload Malayalam Document (.txt)",
-                        file_types=[".txt"],
-                        file_count="single"
-                    )
-                    
-                    visible_entities_batch = gr.CheckboxGroup(
-                        choices=["PER", "ORG", "LOC", "DATE", "CARDINAL"],
-                        value=["PER", "ORG", "LOC", "DATE", "CARDINAL"],
-                        label="Entity Labels to Filter"
-                    )
-                    
-                    submit_btn_batch = gr.Button("⚙️ Process Document", variant="primary", size="lg")
-                    status_output = gr.Markdown("Upload a file to start.")
-                    
-                with gr.Column(scale=3):
-                    gr.Markdown("### 📈 Extracted Entities Summary")
-                    batch_entity_table = gr.Dataframe(
-                        headers=["Entity Text", "Entity Class", "Occurrence Count", "Quick Search"],
-                        datatype=["markdown", "str", "number", "markdown"],
-                        interactive=False,
-                        wrap=True
-                    )
-                    
-                    csv_download = gr.File(
-                        label="📥 Download Extracted Entities CSV Report"
-                    )
-
-                    batch_plot = gr.BarPlot(
-                        x="Entity Class",
-                        y="Total Detections",
-                        title="Overall Entity Class Distribution",
-                        color="Entity Class",
-                        color_map=config.ENTITY_COLORS,
-                        y_lim=[0, None],
-                        height=220
-                    )
+        with gr.Column(scale=2):
+            visible_entities_single = gr.CheckboxGroup(
+                choices=["PER", "ORG", "LOC", "DATE", "CARDINAL"],
+                value=["PER", "ORG", "LOC", "DATE", "CARDINAL"],
+                label="Entity labels (select all)"
+            )
             
-            submit_btn_batch.click(
-                fn=process_batch_file,
-                inputs=[file_input, visible_entities_batch],
-                outputs=[batch_entity_table, csv_download, status_output, batch_plot]
+            gr.Markdown(
+                """
+                ### Legend & Colors:
+                - <span style='color:#3B82F6; font-weight:bold;'>PER</span>: Person names
+                - <span style='color:#10B981; font-weight:bold;'>ORG</span>: Organizations
+                - <span style='color:#F59E0B; font-weight:bold;'>LOC</span>: Locations / GPE
+                - <span style='color:#EC4899; font-weight:bold;'>DATE</span>: Calendar dates, times
+                - <span style='color:#06B6D4; font-weight:bold;'>CARDINAL</span>: Numbers, measurements
+                """
             )
-            visible_entities_batch.change(
-                fn=process_batch_file,
-                inputs=[file_input, visible_entities_batch],
-                outputs=[batch_entity_table, csv_download, status_output, batch_plot]
-            )
+
+    gr.Markdown("---")
+    gr.Markdown("### 🏷️ Visualised Text Output")
+    
+    # Large highlighted output below, legend is hidden since checkbox acts as legend
+    highlighted_output = gr.HighlightedText(
+        label="Visualised Entities",
+        color_map=config.ENTITY_COLORS,
+        combine_adjacent=True,
+        show_legend=False
+    )
+    
+    gr.Markdown("---")
+
+    with gr.Accordion("📊 Detailed Entity Table & Statistics", open=True):
+        with gr.Row():
+            with gr.Column(scale=1):
+                entity_table = gr.Dataframe(
+                    headers=["Entity Text", "Entity Class", "Confidence Score", "Quick Search"],
+                    datatype=["markdown", "str", "str", "markdown"],
+                    interactive=False,
+                    wrap=True
+                )
+            with gr.Column(scale=1):
+                single_plot = gr.BarPlot(
+                    x="Entity Class",
+                    y="Count",
+                    title="Entity Class Count Distribution",
+                    color="Entity Class",
+                    color_map=config.ENTITY_COLORS,
+                    y_lim=[0, None],
+                    height=240
+                )
+
+    with gr.Accordion("📂 Batch Document Processing", open=False):
+        with gr.Row():
+            with gr.Column(scale=2):
+                file_input = gr.File(
+                    label="Upload Malayalam Document (.txt)",
+                    file_types=[".txt"],
+                    file_count="single"
+                )
+                
+                visible_entities_batch = gr.CheckboxGroup(
+                    choices=["PER", "ORG", "LOC", "DATE", "CARDINAL"],
+                    value=["PER", "ORG", "LOC", "DATE", "CARDINAL"],
+                    label="Entity Labels to Filter"
+                )
+                
+                submit_btn_batch = gr.Button("⚙️ Process Document", variant="primary", size="lg")
+                status_output = gr.Markdown("Upload a file to start.")
+                
+            with gr.Column(scale=3):
+                gr.Markdown("### Extracted Entities Summary")
+                batch_entity_table = gr.Dataframe(
+                    headers=["Entity Text", "Entity Class", "Occurrence Count", "Quick Search"],
+                    datatype=["markdown", "str", "number", "markdown"],
+                    interactive=False,
+                    wrap=True
+                )
+                
+                csv_download = gr.File(
+                    label="📥 Download Extracted Entities CSV Report"
+                )
+
+                batch_plot = gr.BarPlot(
+                    x="Entity Class",
+                    y="Total Detections",
+                    title="Overall Entity Class Distribution",
+                    color="Entity Class",
+                    color_map=config.ENTITY_COLORS,
+                    y_lim=[0, None],
+                    height=240
+                )
 
     with gr.Accordion("ℹ️ Technical Details & Model Architecture", open=False):
         gr.Markdown(
@@ -348,11 +367,34 @@ with gr.Blocks(title="Malayalam NER System", css=custom_css, theme=theme) as dem
               - `PER`: Persons (e.g. `പിണറായി വിജയൻ`)
               - `ORG`: Organizations (e.g. `ഐഎസ്ആർഒ`)
               - `LOC`: Locations (e.g. `ശ്രീഹരിക്കോട്ട`)
-              - `DATE`: Dates & Months (e.g. `ഓഗസ്റ്റ്`)
+              - `DATE`: Dates & Months (e.g. `12-04-2023`)
               - `CARDINAL`: Numeric values and units (e.g. `രൂപ`, `100`)
             - **Interactive Lookup**: Uses dynamically generated links to search Malayalam Wikipedia or Google for instant details.
             """
         )
+
+    # Event Handlers
+    submit_btn.click(
+        fn=process_malayalam_ner,
+        inputs=[input_text, visible_entities_single],
+        outputs=[highlighted_output, entity_table, single_plot]
+    )
+    visible_entities_single.change(
+        fn=process_malayalam_ner,
+        inputs=[input_text, visible_entities_single],
+        outputs=[highlighted_output, entity_table, single_plot]
+    )
+
+    submit_btn_batch.click(
+        fn=process_batch_file,
+        inputs=[file_input, visible_entities_batch],
+        outputs=[batch_entity_table, csv_download, status_output, batch_plot]
+    )
+    visible_entities_batch.change(
+        fn=process_batch_file,
+        inputs=[file_input, visible_entities_batch],
+        outputs=[batch_entity_table, csv_download, status_output, batch_plot]
+    )
 
 if __name__ == "__main__":
     demo.launch(server_name="127.0.0.1", server_port=7860, share=False)
