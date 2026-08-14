@@ -57,6 +57,77 @@ def process_malayalam_ner(text):
     return highlighted_output, df_results
 
 
+def process_batch_file(file_obj):
+    if file_obj is None:
+        return None, None, "Please upload a valid text file."
+    
+    try:
+        # Load file content
+        with open(file_obj.name, "r", encoding="utf-8") as f:
+            content = f.read()
+            
+        if not content.strip():
+            return None, None, "The uploaded file is empty."
+            
+        # Split into lines/sentences
+        lines = [line.strip() for line in content.split("\n") if line.strip()]
+        
+        entity_counts = {}
+        for line in lines:
+            _, entities = predictor.predict(line)
+            for ent in entities:
+                key = (ent["text"], ent["type"])
+                entity_counts[key] = entity_counts.get(key, 0) + 1
+                
+        # Format results for Gradio DataFrame display
+        table_data = []
+        import urllib.parse
+        for (text, ent_type), count in sorted(entity_counts.items(), key=lambda x: x[1], reverse=True):
+            if ent_type in ["PER", "LOC", "ORG"]:
+                encoded_text = urllib.parse.quote(text)
+                wiki_url = f"https://ml.wikipedia.org/wiki/Special:Search?search={encoded_text}"
+                google_url = f"https://www.google.com/search?q={encoded_text}+മലയാളം"
+                quick_links = f"[Wikipedia 🌐]({wiki_url}) | [Google 🔍]({google_url})"
+                entity_display = f"[{text}]({wiki_url})"
+            else:
+                entity_display = text
+                quick_links = "—"
+                
+            table_data.append({
+                "Entity Text": entity_display,
+                "Entity Class": ent_type,
+                "Occurrence Count": count,
+                "Quick Search": quick_links
+            })
+            
+        if not table_data:
+            return None, None, "No entities were detected in the uploaded file."
+            
+        df_results = pd.DataFrame(table_data)
+        
+        # Save a clean CSV for download
+        download_data = []
+        for (text, ent_type), count in sorted(entity_counts.items(), key=lambda x: x[1], reverse=True):
+            download_data.append({
+                "Entity Text": text,
+                "Entity Class": ent_type,
+                "Occurrence Count": count
+            })
+        df_download = pd.DataFrame(download_data)
+        
+        import tempfile
+        import os
+        temp_dir = tempfile.gettempdir()
+        csv_path = os.path.join(temp_dir, "extracted_malayalam_entities.csv")
+        df_download.to_csv(csv_path, index=False, encoding="utf-8-sig")
+        
+        summary_text = f"✅ Processed {len(lines)} lines successfully. Extracted {len(entity_counts)} unique entities."
+        return df_results, csv_path, summary_text
+        
+    except Exception as e:
+        return None, None, f"❌ Error processing file: {str(e)}"
+
+
 # Pre-defined sample Malayalam sentences for user quick testing
 sample_examples = [
     ["കോൺഗ്രസ് സംസ്ഥാന അധ്യക്ഷൻ ജി പരമേശ്വര ഉപമുഖ്യമന്ത്രിയാകും ."],
@@ -80,43 +151,78 @@ with gr.Blocks(title="Malayalam NER System", css=custom_css) as demo:
         """
     )
 
-    with gr.Row():
-        with gr.Column(scale=2):
-            input_text = gr.Textbox(
-                lines=4,
-                placeholder="ഇവിടെ മലയാളം വാചകം നൽകുക...",
-                label="Input Malayalam Sentence",
-                value="കോൺഗ്രസ് സംസ്ഥാന അധ്യക്ഷൻ ജി പരമേശ്വര ഉപമുഖ്യമന്ത്രിയാകും ."
-            )
-            submit_btn = gr.Button("🔍 Extract Named Entities", variant="primary", size="lg")
+    with gr.Tabs():
+        with gr.Tab("📝 Single Text Analysis"):
+            with gr.Row():
+                with gr.Column(scale=2):
+                    input_text = gr.Textbox(
+                        lines=4,
+                        placeholder="ഇവിടെ മലയാളം വാചകം നൽകുക...",
+                        label="Input Malayalam Sentence",
+                        value="കോൺഗ്രസ് സംസ്ഥാന അധ്യക്ഷൻ ജി പരമേശ്വര ഉപമുഖ്യമന്ത്രിയാകും ."
+                    )
+                    submit_btn = gr.Button("🔍 Extract Named Entities", variant="primary", size="lg")
 
-            gr.Examples(
-                examples=sample_examples,
-                inputs=input_text,
-                label="Sample Inputs (Click to test)"
+                    gr.Examples(
+                        examples=sample_examples,
+                        inputs=input_text,
+                        label="Sample Inputs (Click to test)"
+                    )
+
+                with gr.Column(scale=3):
+                    gr.Markdown("### Highlighted Named Entities")
+                    highlighted_output = gr.HighlightedText(
+                        label="Predicted Entities",
+                        color_map=config.ENTITY_COLORS,
+                        combine_adjacent=True
+                    )
+
+                    gr.Markdown("### Extracted Entity Table")
+                    entity_table = gr.Dataframe(
+                        headers=["Entity Text", "Entity Class", "Confidence Score", "Quick Search"],
+                        datatype=["markdown", "str", "str", "markdown"],
+                        interactive=False,
+                        wrap=True
+                    )
+
+            submit_btn.click(
+                fn=process_malayalam_ner,
+                inputs=[input_text],
+                outputs=[highlighted_output, entity_table]
             )
 
-        with gr.Column(scale=3):
-            gr.Markdown("### Highlighted Named Entities")
-            highlighted_output = gr.HighlightedText(
-                label="Predicted Entities",
-                color_map=config.ENTITY_COLORS,
-                combine_adjacent=True
+        with gr.Tab("📂 Batch File Processing"):
+            with gr.Row():
+                with gr.Column(scale=2):
+                    file_input = gr.File(
+                        label="Upload Malayalam Text File (.txt)",
+                        file_types=[".txt"],
+                        file_count="single"
+                    )
+                    submit_btn_batch = gr.Button("⚙️ Process Document", variant="primary", size="lg")
+                    status_output = gr.Markdown("Upload a .txt file and click 'Process Document' to start.")
+                    
+                    # Provide link to download template or instruction
+                    gr.Markdown("*(Note: The text file should contain one Malayalam sentence/paragraph per line.)*")
+                    
+                with gr.Column(scale=3):
+                    gr.Markdown("### Extracted Entities Summary (Sorted by Occurrences)")
+                    batch_entity_table = gr.Dataframe(
+                        headers=["Entity Text", "Entity Class", "Occurrence Count", "Quick Search"],
+                        datatype=["markdown", "str", "number", "markdown"],
+                        interactive=False,
+                        wrap=True
+                    )
+                    
+                    csv_download = gr.File(
+                        label="📥 Download Extracted Entities CSV Report"
+                    )
+            
+            submit_btn_batch.click(
+                fn=process_batch_file,
+                inputs=[file_input],
+                outputs=[batch_entity_table, csv_download, status_output]
             )
-
-            gr.Markdown("### Extracted Entity Table")
-            entity_table = gr.Dataframe(
-                headers=["Entity Text", "Entity Class", "Confidence Score", "Quick Search"],
-                datatype=["markdown", "str", "str", "markdown"],
-                interactive=False,
-                wrap=True
-            )
-
-    submit_btn.click(
-        fn=process_malayalam_ner,
-        inputs=[input_text],
-        outputs=[highlighted_output, entity_table]
-    )
 
     with gr.Accordion("ℹ️ Model Architecture & Technical Details", open=False):
         gr.Markdown(

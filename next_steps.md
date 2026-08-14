@@ -5,9 +5,10 @@
   - **Why**: It makes the UI feel like a finished product (e.g., clicking on "പിണറായി വിജയൻ" immediately shows his bio).
   - **Status**: Completed.
 
-- [ ] **2. Batch File Uploader (TXT / CSV Processor)**
+- [x] **2. Batch File Uploader (TXT / CSV Processor)**
   - **What**: Add an upload tab in the Gradio UI allowing users to upload a .txt file of Malayalam text. The system processes the file, counts all entities, and lets the user download a structured CSV report (e.g., "Top mentioned locations in this document").
   - **Why**: Demonstrates practical utility for processing large datasets (like news archives).
+  - **Status**: Completed.
 
 - [ ] **3. Gradio Entity Distribution Visualizations**
   - **What**: Use Gradio's built-in plotting component to render a simple bar chart or pie chart of the entity types detected in the text (e.g., 50% Persons, 30% Locations, 20% Dates).
