@@ -8,9 +8,12 @@ import config
 predictor = MalayalamNERPredictor()
 
 
-def process_malayalam_ner(text):
+def process_malayalam_ner(text, visible_entities=None):
     if not text or not text.strip():
-        return [], []
+        return [], pd.DataFrame(columns=["Entity Text", "Entity Class", "Confidence Score", "Quick Search"]), pd.DataFrame(columns=["Entity Class", "Count"])
+
+    if visible_entities is None:
+        visible_entities = ["PER", "ORG", "LOC", "DATE", "CARDINAL"]
 
     word_map, entities = predictor.predict(text)
 
@@ -23,27 +26,34 @@ def process_malayalam_ner(text):
             highlighted_output.append((word + " ", None))
         else:
             ent_type = tag.split("-")[1]
-            highlighted_output.append((word + " ", ent_type))
+            if ent_type in visible_entities:
+                highlighted_output.append((word + " ", ent_type))
+            else:
+                highlighted_output.append((word + " ", None))
 
     # Format for Entity Data Table
     table_data = []
     for ent in entities:
-        text = ent["text"]
+        text_val = ent["text"]
         ent_type = ent["type"]
         confidence = f"{ent['confidence'] * 100:.1f}%"
         
+        # Skip if not selected in filter
+        if ent_type not in visible_entities:
+            continue
+            
         # Generate search links for PER, LOC, ORG in Malayalam
         if ent_type in ["PER", "LOC", "ORG"]:
             import urllib.parse
-            encoded_text = urllib.parse.quote(text)
+            encoded_text = urllib.parse.quote(text_val)
             wiki_url = f"https://ml.wikipedia.org/wiki/Special:Search?search={encoded_text}"
             google_url = f"https://www.google.com/search?q={encoded_text}+മലയാളം"
             
             # Format as clickable Markdown links
-            entity_display = f"[{text}]({wiki_url})"
+            entity_display = f"[{text_val}]({wiki_url})"
             quick_links = f"[Wikipedia 🌐]({wiki_url}) | [Google 🔍]({google_url})"
         else:
-            entity_display = text
+            entity_display = text_val
             quick_links = "—"
             
         table_data.append({
@@ -59,7 +69,8 @@ def process_malayalam_ner(text):
     class_counts = {}
     for ent in entities:
         ent_type = ent["type"]
-        class_counts[ent_type] = class_counts.get(ent_type, 0) + 1
+        if ent_type in visible_entities:
+            class_counts[ent_type] = class_counts.get(ent_type, 0) + 1
         
     df_plot = pd.DataFrame([
         {"Entity Class": k, "Count": v} for k, v in class_counts.items()
@@ -68,10 +79,13 @@ def process_malayalam_ner(text):
     return highlighted_output, df_results, df_plot
 
 
-def process_batch_file(file_obj):
+def process_batch_file(file_obj, visible_entities=None):
     empty_results = pd.DataFrame(columns=["Entity Text", "Entity Class", "Occurrence Count", "Quick Search"])
     empty_plot = pd.DataFrame(columns=["Entity Class", "Total Detections"])
     
+    if visible_entities is None:
+        visible_entities = ["PER", "ORG", "LOC", "DATE", "CARDINAL"]
+        
     if file_obj is None:
         return empty_results, None, "Please upload a valid text file.", empty_plot
     
@@ -96,15 +110,18 @@ def process_batch_file(file_obj):
         # Format results for Gradio DataFrame display
         table_data = []
         import urllib.parse
-        for (text, ent_type), count in sorted(entity_counts.items(), key=lambda x: x[1], reverse=True):
+        for (text_val, ent_type), count in sorted(entity_counts.items(), key=lambda x: x[1], reverse=True):
+            if ent_type not in visible_entities:
+                continue
+                
             if ent_type in ["PER", "LOC", "ORG"]:
-                encoded_text = urllib.parse.quote(text)
+                encoded_text = urllib.parse.quote(text_val)
                 wiki_url = f"https://ml.wikipedia.org/wiki/Special:Search?search={encoded_text}"
                 google_url = f"https://www.google.com/search?q={encoded_text}+മലയാളം"
                 quick_links = f"[Wikipedia 🌐]({wiki_url}) | [Google 🔍]({google_url})"
-                entity_display = f"[{text}]({wiki_url})"
+                entity_display = f"[{text_val}]({wiki_url})"
             else:
-                entity_display = text
+                entity_display = text_val
                 quick_links = "—"
                 
             table_data.append({
@@ -115,15 +132,17 @@ def process_batch_file(file_obj):
             })
             
         if not table_data:
-            return empty_results, None, "No entities were detected in the uploaded file.", empty_plot
+            return empty_results, None, "No entities matching filters were detected in the uploaded file.", empty_plot
             
         df_results = pd.DataFrame(table_data)
         
         # Save a clean CSV for download
         download_data = []
-        for (text, ent_type), count in sorted(entity_counts.items(), key=lambda x: x[1], reverse=True):
+        for (text_val, ent_type), count in sorted(entity_counts.items(), key=lambda x: x[1], reverse=True):
+            if ent_type not in visible_entities:
+                continue
             download_data.append({
-                "Entity Text": text,
+                "Entity Text": text_val,
                 "Entity Class": ent_type,
                 "Occurrence Count": count
             })
@@ -137,8 +156,9 @@ def process_batch_file(file_obj):
         
         # Calculate entity class total detection count for visualization
         type_counts = {}
-        for (text, ent_type), count in entity_counts.items():
-            type_counts[ent_type] = type_counts.get(ent_type, 0) + count
+        for (text_val, ent_type), count in entity_counts.items():
+            if ent_type in visible_entities:
+                type_counts[ent_type] = type_counts.get(ent_type, 0) + count
             
         df_batch_plot = pd.DataFrame([
             {"Entity Class": k, "Total Detections": v} for k, v in type_counts.items()
@@ -159,18 +179,49 @@ sample_examples = [
     ["കൊച്ചി നഗരത്തിൽ കൊച്ചി മെട്രോ രണ്ടാം ഘട്ട നിർമ്മാണം ആരംഭിച്ചു ."]
 ]
 
-# Custom CSS for dark modern theme
+# Custom CSS for modern displaCy-style theme
 custom_css = """
-.gradio-container { font-family: 'Inter', system-ui, sans-serif; }
-#title-header { text-align: center; margin-bottom: 20px; }
+.gradio-container {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    max-width: 1200px !important;
+    margin: auto;
+}
+.app-header {
+    background: linear-gradient(135deg, #4f46e5 0%, #312e81 100%);
+    color: white;
+    padding: 30px;
+    border-radius: 12px;
+    margin-bottom: 25px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    text-align: center;
+}
+.app-header h1 {
+    font-size: 2.2rem;
+    font-weight: 800;
+    margin: 0 0 10px 0;
+    letter-spacing: -0.025em;
+}
+.app-header p {
+    font-size: 1rem;
+    margin: 0;
+    opacity: 0.9;
+}
 """
 
-with gr.Blocks(title="Malayalam NER System", css=custom_css) as demo:
-    gr.Markdown(
+theme = gr.themes.Soft(
+    primary_hue="indigo",
+    secondary_hue="blue",
+    neutral_hue="slate"
+)
+
+with gr.Blocks(title="Malayalam NER System", css=custom_css, theme=theme) as demo:
+    # Custom HTML header matching displaCy banner
+    gr.HTML(
         """
-        # 🇮🇳 Malayalam Named Entity Recognition (NER) System
-        ### Fine-Tuned Transformer-Based Deep Learning Model for Malayalam Entity Extraction
-        Extract and classify entities (**Person**, **Organization**, **Location**, etc.) from Malayalam text using **IndicBERTv2 / MuRIL** architecture.
+        <div class="app-header">
+            <h1>🇮🇳 Malayalam Named Entity Visualizer</h1>
+            <p>Fine-Tuned Deep Learning Transformer Model for Malayalam Entity Extraction & Discovery</p>
+        </div>
         """
     )
 
@@ -179,28 +230,35 @@ with gr.Blocks(title="Malayalam NER System", css=custom_css) as demo:
             with gr.Row():
                 with gr.Column(scale=2):
                     input_text = gr.Textbox(
-                        lines=4,
-                        placeholder="ഇവിടെ മലയാളം വാചകം നൽകുക...",
-                        label="Input Malayalam Sentence",
-                        value="കോൺഗ്രസ് സംസ്ഥാന അധ്യക്ഷൻ ജി പരമേശ്വര ഉപമുഖ്യമന്ത്രിയാകും ."
+                        lines=5,
+                        placeholder="ഇവിടെ മലയാളം വാചകം നൽകുക (Enter Malayalam sentence here)...",
+                        label="Input Text",
+                        value="തിരുവനന്തപുരത്ത് നടന്ന ചടങ്ങിൽ കേരള മുഖ്യമന്ത്രി പിണറായി വിജയൻ സംസാരിച്ചു ."
                     )
-                    submit_btn = gr.Button("🔍 Extract Named Entities", variant="primary", size="lg")
+                    
+                    visible_entities_single = gr.CheckboxGroup(
+                        choices=["PER", "ORG", "LOC", "DATE", "CARDINAL"],
+                        value=["PER", "ORG", "LOC", "DATE", "CARDINAL"],
+                        label="Entity Labels to Display"
+                    )
+                    
+                    submit_btn = gr.Button("🔍 Visualise Entities", variant="primary", size="lg")
 
                     gr.Examples(
                         examples=sample_examples,
                         inputs=input_text,
-                        label="Sample Inputs (Click to test)"
+                        label="Click a sample sentence to load:"
                     )
-
+        
                 with gr.Column(scale=3):
-                    gr.Markdown("### Highlighted Named Entities")
+                    gr.Markdown("### 🏷️ Visualized Named Entities")
                     highlighted_output = gr.HighlightedText(
-                        label="Predicted Entities",
+                        label="Interactive Entity Highlight",
                         color_map=config.ENTITY_COLORS,
                         combine_adjacent=True
                     )
-
-                    gr.Markdown("### Extracted Entity Table")
+        
+                    gr.Markdown("### 📊 Extracted Entity Details")
                     entity_table = gr.Dataframe(
                         headers=["Entity Text", "Entity Class", "Confidence Score", "Quick Search"],
                         datatype=["markdown", "str", "str", "markdown"],
@@ -208,20 +266,25 @@ with gr.Blocks(title="Malayalam NER System", css=custom_css) as demo:
                         wrap=True
                     )
 
-                    gr.Markdown("### Entity Distribution")
                     single_plot = gr.BarPlot(
                         x="Entity Class",
                         y="Count",
-                        title="Entity Type Distribution",
+                        title="Entity Class Count Distribution",
                         color="Entity Class",
                         color_map=config.ENTITY_COLORS,
                         y_lim=[0, None],
-                        height=250
+                        height=220
                     )
-
+            
+            # Allow live prediction when parameters or input changes
             submit_btn.click(
                 fn=process_malayalam_ner,
-                inputs=[input_text],
+                inputs=[input_text, visible_entities_single],
+                outputs=[highlighted_output, entity_table, single_plot]
+            )
+            visible_entities_single.change(
+                fn=process_malayalam_ner,
+                inputs=[input_text, visible_entities_single],
                 outputs=[highlighted_output, entity_table, single_plot]
             )
 
@@ -229,18 +292,22 @@ with gr.Blocks(title="Malayalam NER System", css=custom_css) as demo:
             with gr.Row():
                 with gr.Column(scale=2):
                     file_input = gr.File(
-                        label="Upload Malayalam Text File (.txt)",
+                        label="Upload Malayalam Document (.txt)",
                         file_types=[".txt"],
                         file_count="single"
                     )
-                    submit_btn_batch = gr.Button("⚙️ Process Document", variant="primary", size="lg")
-                    status_output = gr.Markdown("Upload a .txt file and click 'Process Document' to start.")
                     
-                    # Provide link to download template or instruction
-                    gr.Markdown("*(Note: The text file should contain one Malayalam sentence/paragraph per line.)*")
+                    visible_entities_batch = gr.CheckboxGroup(
+                        choices=["PER", "ORG", "LOC", "DATE", "CARDINAL"],
+                        value=["PER", "ORG", "LOC", "DATE", "CARDINAL"],
+                        label="Entity Labels to Filter"
+                    )
+                    
+                    submit_btn_batch = gr.Button("⚙️ Process Document", variant="primary", size="lg")
+                    status_output = gr.Markdown("Upload a file to start.")
                     
                 with gr.Column(scale=3):
-                    gr.Markdown("### Extracted Entities Summary (Sorted by Occurrences)")
+                    gr.Markdown("### 📈 Extracted Entities Summary")
                     batch_entity_table = gr.Dataframe(
                         headers=["Entity Text", "Entity Class", "Occurrence Count", "Quick Search"],
                         datatype=["markdown", "str", "number", "markdown"],
@@ -252,7 +319,6 @@ with gr.Blocks(title="Malayalam NER System", css=custom_css) as demo:
                         label="📥 Download Extracted Entities CSV Report"
                     )
 
-                    gr.Markdown("### Overall Entity Distribution")
                     batch_plot = gr.BarPlot(
                         x="Entity Class",
                         y="Total Detections",
@@ -260,22 +326,31 @@ with gr.Blocks(title="Malayalam NER System", css=custom_css) as demo:
                         color="Entity Class",
                         color_map=config.ENTITY_COLORS,
                         y_lim=[0, None],
-                        height=250
+                        height=220
                     )
             
             submit_btn_batch.click(
                 fn=process_batch_file,
-                inputs=[file_input],
+                inputs=[file_input, visible_entities_batch],
+                outputs=[batch_entity_table, csv_download, status_output, batch_plot]
+            )
+            visible_entities_batch.change(
+                fn=process_batch_file,
+                inputs=[file_input, visible_entities_batch],
                 outputs=[batch_entity_table, csv_download, status_output, batch_plot]
             )
 
-    with gr.Accordion("ℹ️ Model Architecture & Technical Details", open=False):
+    with gr.Accordion("ℹ️ Technical Details & Model Architecture", open=False):
         gr.Markdown(
             """
-            - **Model Encoder**: Pretrained `ai4bharat/IndicBERTv2-MLM-only` / `google/muril-base-cased`
-            - **Tokenization**: Subword Fast Alignment with `-100` subword loss masking
-            - **Supported Entity Classes**: `PER` (Person), `ORG` (Organization), `LOC` (Location), and all dataset entities.
-            - **Dataset**: AI4Bharat / WikiAnn Malayalam Tagged Corpus (~716,000 sentences)
+            - **Model Encoder**: Fine-tuned sequence tagger built on `ai4bharat/IndicBERTv2-MLM-only` (with CRF decoder)
+            - **Entity Classes**: 
+              - `PER`: Persons (e.g. `പിണറായി വിജയൻ`)
+              - `ORG`: Organizations (e.g. `ഐഎസ്ആർഒ`)
+              - `LOC`: Locations (e.g. `ശ്രീഹരിക്കോട്ട`)
+              - `DATE`: Dates & Months (e.g. `ഓഗസ്റ്റ്`)
+              - `CARDINAL`: Numeric values and units (e.g. `രൂപ`, `100`)
+            - **Interactive Lookup**: Uses dynamically generated links to search Malayalam Wikipedia or Google for instant details.
             """
         )
 
