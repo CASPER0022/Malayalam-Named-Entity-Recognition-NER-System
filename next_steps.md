@@ -15,6 +15,7 @@
   - **Why**: Adds a clean, visual analytics layer to the dashboard that professors love during presentations.
   - **Status**: Completed.
 
-- [ ] **4. FastAPI REST API (server.py)**
+- [x] **4. FastAPI REST API (server.py)**
   - **What**: Write a small `server.py` script (~30 lines using FastAPI) that exposes a POST endpoint `/predict`. Other software can send Malayalam text and receive JSON responses containing the extracted entities.
   - **Why**: Shows you know how to build machine learning microservices.
+  - **Status**: Completed.
