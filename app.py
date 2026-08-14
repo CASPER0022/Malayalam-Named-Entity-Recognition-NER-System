@@ -28,13 +28,32 @@ def process_malayalam_ner(text):
     # Format for Entity Data Table
     table_data = []
     for ent in entities:
+        text = ent["text"]
+        ent_type = ent["type"]
+        confidence = f"{ent['confidence'] * 100:.1f}%"
+        
+        # Generate search links for PER, LOC, ORG in Malayalam
+        if ent_type in ["PER", "LOC", "ORG"]:
+            import urllib.parse
+            encoded_text = urllib.parse.quote(text)
+            wiki_url = f"https://ml.wikipedia.org/wiki/Special:Search?search={encoded_text}"
+            google_url = f"https://www.google.com/search?q={encoded_text}+മലയാളം"
+            
+            # Format as clickable Markdown links
+            entity_display = f"[{text}]({wiki_url})"
+            quick_links = f"[Wikipedia 🌐]({wiki_url}) | [Google 🔍]({google_url})"
+        else:
+            entity_display = text
+            quick_links = "—"
+            
         table_data.append({
-            "Entity Text": ent["text"],
-            "Entity Class": ent["type"],
-            "Confidence Score": f"{ent['confidence'] * 100:.1f}%"
+            "Entity Text": entity_display,
+            "Entity Class": ent_type,
+            "Confidence Score": confidence,
+            "Quick Search": quick_links
         })
 
-    df_results = pd.DataFrame(table_data) if table_data else pd.DataFrame(columns=["Entity Text", "Entity Class", "Confidence Score"])
+    df_results = pd.DataFrame(table_data) if table_data else pd.DataFrame(columns=["Entity Text", "Entity Class", "Confidence Score", "Quick Search"])
     return highlighted_output, df_results
 
 
@@ -87,7 +106,8 @@ with gr.Blocks(title="Malayalam NER System", css=custom_css) as demo:
 
             gr.Markdown("### Extracted Entity Table")
             entity_table = gr.Dataframe(
-                headers=["Entity Text", "Entity Class", "Confidence Score"],
+                headers=["Entity Text", "Entity Class", "Confidence Score", "Quick Search"],
+                datatype=["markdown", "str", "str", "markdown"],
                 interactive=False,
                 wrap=True
             )
