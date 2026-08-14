@@ -10,9 +10,10 @@
   - **Why**: Demonstrates practical utility for processing large datasets (like news archives).
   - **Status**: Completed.
 
-- [ ] **3. Gradio Entity Distribution Visualizations**
+- [x] **3. Gradio Entity Distribution Visualizations**
   - **What**: Use Gradio's built-in plotting component to render a simple bar chart or pie chart of the entity types detected in the text (e.g., 50% Persons, 30% Locations, 20% Dates).
   - **Why**: Adds a clean, visual analytics layer to the dashboard that professors love during presentations.
+  - **Status**: Completed.
 
 - [ ] **4. FastAPI REST API (server.py)**
   - **What**: Write a small `server.py` script (~30 lines using FastAPI) that exposes a POST endpoint `/predict`. Other software can send Malayalam text and receive JSON responses containing the extracted entities.

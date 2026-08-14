@@ -54,12 +54,26 @@ def process_malayalam_ner(text):
         })
 
     df_results = pd.DataFrame(table_data) if table_data else pd.DataFrame(columns=["Entity Text", "Entity Class", "Confidence Score", "Quick Search"])
-    return highlighted_output, df_results
+    
+    # Calculate distributions
+    class_counts = {}
+    for ent in entities:
+        ent_type = ent["type"]
+        class_counts[ent_type] = class_counts.get(ent_type, 0) + 1
+        
+    df_plot = pd.DataFrame([
+        {"Entity Class": k, "Count": v} for k, v in class_counts.items()
+    ]) if class_counts else pd.DataFrame(columns=["Entity Class", "Count"])
+    
+    return highlighted_output, df_results, df_plot
 
 
 def process_batch_file(file_obj):
+    empty_results = pd.DataFrame(columns=["Entity Text", "Entity Class", "Occurrence Count", "Quick Search"])
+    empty_plot = pd.DataFrame(columns=["Entity Class", "Total Detections"])
+    
     if file_obj is None:
-        return None, None, "Please upload a valid text file."
+        return empty_results, None, "Please upload a valid text file.", empty_plot
     
     try:
         # Load file content
@@ -67,7 +81,7 @@ def process_batch_file(file_obj):
             content = f.read()
             
         if not content.strip():
-            return None, None, "The uploaded file is empty."
+            return empty_results, None, "The uploaded file is empty.", empty_plot
             
         # Split into lines/sentences
         lines = [line.strip() for line in content.split("\n") if line.strip()]
@@ -101,7 +115,7 @@ def process_batch_file(file_obj):
             })
             
         if not table_data:
-            return None, None, "No entities were detected in the uploaded file."
+            return empty_results, None, "No entities were detected in the uploaded file.", empty_plot
             
         df_results = pd.DataFrame(table_data)
         
@@ -121,11 +135,20 @@ def process_batch_file(file_obj):
         csv_path = os.path.join(temp_dir, "extracted_malayalam_entities.csv")
         df_download.to_csv(csv_path, index=False, encoding="utf-8-sig")
         
+        # Calculate entity class total detection count for visualization
+        type_counts = {}
+        for (text, ent_type), count in entity_counts.items():
+            type_counts[ent_type] = type_counts.get(ent_type, 0) + count
+            
+        df_batch_plot = pd.DataFrame([
+            {"Entity Class": k, "Total Detections": v} for k, v in type_counts.items()
+        ])
+        
         summary_text = f"✅ Processed {len(lines)} lines successfully. Extracted {len(entity_counts)} unique entities."
-        return df_results, csv_path, summary_text
+        return df_results, csv_path, summary_text, df_batch_plot
         
     except Exception as e:
-        return None, None, f"❌ Error processing file: {str(e)}"
+        return empty_results, None, f"❌ Error processing file: {str(e)}", empty_plot
 
 
 # Pre-defined sample Malayalam sentences for user quick testing
@@ -185,10 +208,19 @@ with gr.Blocks(title="Malayalam NER System", css=custom_css) as demo:
                         wrap=True
                     )
 
+                    gr.Markdown("### Entity Distribution")
+                    single_plot = gr.BarPlot(
+                        x="Entity Class",
+                        y="Count",
+                        title="Entity Type Distribution",
+                        color="Entity Class",
+                        height=250
+                    )
+
             submit_btn.click(
                 fn=process_malayalam_ner,
                 inputs=[input_text],
-                outputs=[highlighted_output, entity_table]
+                outputs=[highlighted_output, entity_table, single_plot]
             )
 
         with gr.Tab("📂 Batch File Processing"):
@@ -217,11 +249,20 @@ with gr.Blocks(title="Malayalam NER System", css=custom_css) as demo:
                     csv_download = gr.File(
                         label="📥 Download Extracted Entities CSV Report"
                     )
+
+                    gr.Markdown("### Overall Entity Distribution")
+                    batch_plot = gr.BarPlot(
+                        x="Entity Class",
+                        y="Total Detections",
+                        title="Overall Entity Class Distribution",
+                        color="Entity Class",
+                        height=250
+                    )
             
             submit_btn_batch.click(
                 fn=process_batch_file,
                 inputs=[file_input],
-                outputs=[batch_entity_table, csv_download, status_output]
+                outputs=[batch_entity_table, csv_download, status_output, batch_plot]
             )
 
     with gr.Accordion("ℹ️ Model Architecture & Technical Details", open=False):
