@@ -16,21 +16,21 @@
 
 ---
 
-## 🚀 Recommended Next Steps (Advanced/Portfolio Enhancements)
+## 🚀 Recommended Next Steps (Training-Free / Run on Current Model)
 
 
-### ⚡ 1. Model Quantization & Optimization (Inference Speedup)
-- **What**: Quantize the IndicBERTv2/MuRIL weights (e.g., using PyTorch's dynamic `INT8` quantization or converting to ONNX runtime) and measure the performance gains.
-- **Why**: Proves you know how to reduce cloud hosting costs and optimize model latency (e.g., reducing inference time by 2-3x).
+### 📄 1. PDF / DOCX Document Entity Highlighter
+- **What**: Extend the batch tab so users can upload standard formats (like `.pdf` or `.docx`). The backend extracts raw text, runs predictions with the *current* model, and returns a formatted HTML/markdown view with highlighted entities.
+- **Why**: High utility feature for real-world document processing (legal documents, news archives, reports).
 
-### 📊 2. Comprehensive Model Evaluation & Error Analysis Dashboard
-- **What**: Create an evaluation script that calculates Precision, Recall, and F1-scores per entity class (`PER`, `LOC`, `ORG`) on the test dataset, and plot a confusion matrix.
-- **Why**: Shows academic and industry rigor. Professors love detailed error analysis (e.g., identifying when the model confuses a Person name with an Organization).
+### 🕸️ 2. Entity Co-occurrence Network Graph (Relation Mapping)
+- **What**: When processing a document, detect which entities appear together in the same sentences (e.g., `പിണറായി വിജയൻ` [PER] and `തിരുവനന്തപുരം` [LOC]). Use a simple visualization library (like `networkx` or `matplotlib`) to render a "Relation Map" of connected entities.
+- **Why**: Looks incredibly advanced and visually stunning for presentations. Professors love relationship maps.
 
-### ✍️ 3. Active Learning & Human-in-the-Loop Entity Corrector
-- **What**: Add a feature in the Gradio UI where the user can correct a misclassified entity, saving the corrected sample to a local `feedback.jsonl` file.
-- **Why**: Simulates real-world production setups where systems gather user feedback to periodically fine-tune and improve the model over time.
+### 📊 3. Current Model Performance Evaluation Dashboard
+- **What**: Run the existing model over the `dataset/test.csv` file. Generate a dashboard showing its final accuracy, F1-scores, precision, and recall, along with a list of "hard sentences" where the model made errors.
+- **Why**: Demonstrates proper validation and testing rigor without requiring any training steps.
 
-### 📄 4. PDF / DOCX Document Entity Highlighter
-- **What**: Upgrade the uploader to extract text directly from PDFs or Word documents, run NER, and highlight entities in a structured text view or generate a downloadable highlighted PDF.
-- **Why**: Creates a highly practical tool for document scanning, legal tech, or financial audit use cases.
+### ⚡ 4. CPU Inference Speed Optimization (ONNX Conversion)
+- **What**: Export the existing PyTorch model to ONNX format. Use ONNX Runtime to run CPU inferences. Benchmark the speed of ONNX vs. native PyTorch on your CPU.
+- **Why**: Real-world deployment on CPU is often done using ONNX to reduce latency and memory overhead without any re-training.
