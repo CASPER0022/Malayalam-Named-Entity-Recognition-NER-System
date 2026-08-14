@@ -214,6 +214,8 @@ with gr.Blocks(title="Malayalam NER System", css=custom_css) as demo:
                         y="Count",
                         title="Entity Type Distribution",
                         color="Entity Class",
+                        color_map=config.ENTITY_COLORS,
+                        y_lim=[0, None],
                         height=250
                     )
 
@@ -256,6 +258,8 @@ with gr.Blocks(title="Malayalam NER System", css=custom_css) as demo:
                         y="Total Detections",
                         title="Overall Entity Class Distribution",
                         color="Entity Class",
+                        color_map=config.ENTITY_COLORS,
+                        y_lim=[0, None],
                         height=250
                     )
             
