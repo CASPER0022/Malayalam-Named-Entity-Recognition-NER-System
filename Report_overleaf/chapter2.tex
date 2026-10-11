@@ -1,0 +1,81 @@
+\chapter{Literature Review}\label{ch:lit}
+
+\section{Classical Approaches}
+
+\textbf{Lakshmi \emph{et al.} (2016)}~\cite{lakshmi2016fuzzy} use a
+one-against-all SVM with contextual and grammar-rule features for four
+classes (Name, Organization, Place, Date). A fuzzy module resolves cases
+where the SVM assigns a word to both Name and Organization, using whether
+the sentence subject governs an action verb. On a 500-sentence in-house test
+set they report an F-measure of 83.82\% for the SVM alone and 88.13\% with
+the fuzzy module. The method is interpretable and needs little data, but it
+relies on hand-crafted rules and a parser, and its private test set makes
+the results impossible to reproduce. Sreeja and Pillai~\cite{sp2020towards}
+survey the challenges of Malayalam NER and argue that subword
+representations are needed for its rich morphology.
+
+\section{Neural and Transformer Approaches}
+
+BiLSTM-CRF models~\cite{huang2015bidirectional, lample2016neural} replaced
+hand-crafted features with learned ones and use a CRF~\cite{lafferty2001conditional}
+to decode the best tag sequence. They were later outperformed by pre-trained
+Transformers~\cite{vaswani2017attention}:
+\begin{itemize}
+  \item \textbf{mBERT}~\cite{devlin2019bert}: trained on Wikipedia in 104
+  languages. Malayalam is only a small share of its data.
+  \item \textbf{IndicBERTv2}~\cite{doddapaneni2023towards}: BERT-base trained
+  on IndicCorp~v2 (23 Indic languages and English), with a vocabulary built
+  for Indic scripts.
+  \item \textbf{MuRIL}~\cite{khanuja2021muril}: trained on 16 Indian
+  languages and their transliterations.
+  \item \textbf{Naamapadam / IndicNER}~\cite{mhaske2023naamapadam}: the
+  largest public Indic NER corpus. Training labels are projected from
+  English, and the test sets are human-annotated.
+\end{itemize}
+Gopalakrishnan \emph{et al.}~\cite{gopalakrishnan2025efficient} fine-tune
+m-BERT for Malayalam and report 96.45\% F1. Their dataset and evaluation
+protocol are not released.
+
+\section{Base Paper}
+
+Bharathi Mohan \emph{et al.}~\cite{mohan2023finetuned} (IEEE EASCT 2023)
+fine-tune multilingual BERT with a softmax token-classification layer on
+WikiAnn~\cite{pan2017cross} for Tamil, Malayalam, Marathi and Bengali.
+Table~\ref{tab:base} gives their Malayalam results.
+
+\begin{table}[H]
+\centering
+\caption{Malayalam results reported in the base paper~\cite{mohan2023finetuned} (WikiAnn).}
+\label{tab:base}
+\begin{tabular}{lccc}
+\toprule
+Entity & Precision (\%) & Recall (\%) & F1 (\%) \\
+\midrule
+LOC     & 79.8 & 91.26 & 85.50 \\
+ORG     & 81.3 & 76.5  & 78.8  \\
+PER     & 86.2 & 84.4  & 85.3  \\
+Overall & 82.1 & 82.1  & 82.2  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Strengths.} A single multilingual encoder gives competitive NER in
+four Indian languages without feature engineering.
+
+\textbf{Gaps.}
+\begin{enumerate}
+  \item Each token is classified independently, so tag dependencies are
+  ignored and invalid sequences (e.g.\ \texttt{O}$\rightarrow$\texttt{I-ORG})
+  are possible.
+  \item The paper does not describe how word labels are aligned with subword
+  tokens, a key choice for agglutinative languages.
+  \item It does not say whether scores are token-level or span-level, and
+  some figures are inconsistent. For example, the Marathi ORG F1 (88.8\%)
+  is higher than both its precision (84\%) and its recall (85.6\%).
+  \item WikiAnn is annotated automatically and consists mostly of short
+  title fragments rather than running text.
+\end{enumerate}
+
+This project addresses these gaps. It uses an Indic-specific encoder, makes
+the subword alignment explicit, adds a CRF layer, and evaluates with strict
+span-level metrics on the human-annotated Naamapadam test set.
