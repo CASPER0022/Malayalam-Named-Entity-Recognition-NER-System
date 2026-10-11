@@ -1,0 +1,59 @@
+\chapter{Introduction}
+
+Named Entity Recognition (NER) is the task of finding spans of text that
+refer to real-world entities and assigning each span a type such as
+\emph{Person}, \emph{Organization} or \emph{Location}. It is a basic step
+in information extraction, question answering, search and knowledge-graph
+construction. English NER is a mature area, but most Indian languages are
+still low-resource. This project builds and analyses a NER system for
+Malayalam, the language of Kerala, using a fine-tuned multilingual BERT
+model.
+
+\section{NER as Sequence Labelling}
+
+NER is treated as token-level sequence labelling: for a sentence
+$\mathbf{x} = (x_1, \ldots, x_n)$ the model predicts one tag $y_i$ per word.
+
+\begin{definition}[IOB2 scheme]\label{def:iob2}
+Each word is tagged \texttt{B-}$T$ (first word of an entity of type $T$),
+\texttt{I-}$T$ (a later word inside the entity) or \texttt{O} (not an
+entity). With $T \in \{\mathrm{PER}, \mathrm{ORG},
+\mathrm{LOC}\}$ there are seven tags. A tag \texttt{I-}$T$ is valid only
+after \texttt{B-}$T$ or \texttt{I-}$T$.
+\end{definition}
+
+\section{Challenges in Malayalam}
+
+\begin{itemize}
+  \item \textbf{No capitalization.} The script has no upper case, so the
+  strongest cue used in English NER is missing.
+  \item \textbf{Agglutination.} Case markers fuse onto names, so one entity
+  has many surface forms. For example, \emph{Thiruvananthapuram} appears as
+  \emph{Thiruvananthapurathth} (``in Thiruvananthapuram'') or
+  \emph{Thiruvananthapurathekk} (``to Thiruvananthapuram'').
+  \item \textbf{Ambiguity.} Many names are also common words, and
+  organization names often contain place names (e.g.\ \emph{Kerala
+  Blasters}).
+  \item \textbf{Little annotated data.} Before Naamapadam~\cite{mhaske2023naamapadam},
+  systems were trained on a few hundred hand-labelled
+  sentences~\cite{lakshmi2016fuzzy}.
+\end{itemize}
+
+Pre-trained multilingual Transformers such as mBERT~\cite{devlin2019bert},
+MuRIL~\cite{khanuja2021muril} and IndicBERTv2~\cite{doddapaneni2023towards} address these issues. They transfer knowledge across
+languages, and their subword tokenizers split long agglutinated words into
+reusable pieces.
+
+\section{Problem Statement and Objectives}
+
+Given a raw Malayalam sentence, identify every PER, ORG and LOC mention and
+output a valid IOB2 tag sequence. The objectives are:
+\begin{enumerate}
+  \item Study and critically analyse the base paper~\cite{mohan2023finetuned}
+  and related Malayalam NER work.
+  \item Fine-tune a multilingual BERT encoder (IndicBERTv2) for Malayalam NER
+  with subword-aware label alignment.
+  \item Extend the base approach with a CRF output layer and compare it with
+  the softmax baseline using strict entity-level metrics.
+  \item Deploy the model as a web application and a REST API.
+\end{enumerate}
