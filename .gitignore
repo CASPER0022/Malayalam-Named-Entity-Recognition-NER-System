@@ -36,3 +36,11 @@ Thumbs.db
 
 # Jupyter Notebook Checkpoints
 .ipynb_checkpoints
+
+# Presentations & reports (kept locally, not in the repo)
+*.pptx
+~$*
+Report/
+Report_overleaf/
+Report_overleaf.zip
+HonoursP1Report_Template/
